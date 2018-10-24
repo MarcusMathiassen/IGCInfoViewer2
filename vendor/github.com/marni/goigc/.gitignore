@@ -1,0 +1,11 @@
+.DS_Store
+./goigc
+./igctool
+goigc.iml
+.idea
+profile.cov
+cpu.pprof
+mem.pprof
+goigc.test
+*swp
+*swo
