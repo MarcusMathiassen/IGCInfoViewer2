@@ -75,17 +75,21 @@ func main() {
 
 	router := gin.Default()
 
-	api := router.Group("/igcinfo/api")
+	router.GET("/paragliding/", func(c *gin.Context) {
+		c.Redirect(301, "/paragliding/api")
+	})
+
+	api := router.Group("/paragliding/api")
 	{
 		api.GET("", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"uptime":  getUptime(),
-				"info":    "Service for IGC tracks.",
+				"info":    "Service for Paragliding tracks.",
 				"version": "v1",
 			})
 		})
 
-		api.POST("/igc", func(c *gin.Context) {
+		api.POST("/track", func(c *gin.Context) {
 			var json map[string]interface{}
 			var url string
 			if c.BindJSON(&json) == nil {
@@ -126,7 +130,7 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"id": id})
 		})
 
-		api.GET("/igc", func(c *gin.Context) {
+		api.GET("/track", func(c *gin.Context) {
 			ids := make([]int, len(trackInfos))
 			for i := range ids {
 				ids[i] = i
@@ -134,7 +138,7 @@ func main() {
 			c.JSON(http.StatusOK, ids)
 		})
 
-		api.GET("/igc/:id", func(c *gin.Context) {
+		api.GET("/track/:id", func(c *gin.Context) {
 			id, err := getAndValidateID(c)
 			if err != nil {
 				c.Status(http.StatusNotFound)
@@ -151,7 +155,7 @@ func main() {
 			})
 		})
 
-		api.GET("/igc/:id/:field", func(c *gin.Context) {
+		api.GET("/track/:id/:field", func(c *gin.Context) {
 			id, err := getAndValidateID(c)
 			if err != nil {
 				c.Status(http.StatusNotFound)
@@ -166,6 +170,52 @@ func main() {
 			}
 
 			c.String(http.StatusOK, fieldRequested)
+		})
+
+		// GET /api/ticker/
+		// What: returns the JSON struct representing the ticker for the IGC tracks. The first track returned should be the oldest. The array of track ids returned should be capped at 5, to emulate "paging" of the responses. The cap (5) should be a configuration parameter of the application (ie. easy to change by the administrator).
+		// Response type: application/json
+		// Response code: 200 if everything is OK, appropriate error code otherwise.
+		api.GET("/ticker", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"t_latest":   "<latest added timestamp>,",
+				"t_start":    "<the first timestamp of the added track>, this will be the oldest track recorded",
+				"t_stop":     "<the last timestamp of the added track>, this might equal to t_latest if there are no more tracks left",
+				"tracks":     "[<id1>, <id2>, ...]",
+				"processing": "<time in ms of how long it took to process the request>",
+			})
+		})
+
+		api.GET("/ticker/:param", func(c *gin.Context) {
+
+			path := c.Param("param")
+
+			switch path {
+			case "latest":
+				// GET /api/ticker/latest
+				// What: returns the timestamp of the latest added track
+				// Response type: text/plain
+				// Response code: 200 if everything is OK, appropriate error code otherwise.
+				// Response: <timestamp> for the latest added track
+				timestamp := "temporary timestamp REPLACE ME"
+				c.String(http.StatusOK, timestamp)
+			default:
+				// GET /api/ticker/<timestamp>
+				// What: returns the JSON struct representing the ticker for the IGC tracks. The first returned track should have the timestamp HIGHER than the one provided in the query. The array of track IDs returned should be capped at 5, to emulate "paging" of the responses. The cap (5) should be a configuration parameter of the application (ie. easy to change by the administrator).
+				// Response type: application/json
+				// Response code: 200 if everything is OK, appropriate error code otherwise.
+				// timestamp := path
+				// if !isValidTimestamp(timestamp) {
+				// c.Status(http.StatusNotFound)
+				// }
+				c.JSON(http.StatusOK, gin.H{
+					"t_latest":   "<latest added timestamp of the entire collection>,",
+					"t_start":    "<the first timestamp of the added track>, this must be higher than the parameter provided in the query",
+					"t_stop":     "<the last timestamp of the added track>, this might equal to t_latest if there are no more tracks left",
+					"tracks":     "[<id1>, <id2>, ...]",
+					"processing": "<time in ms of how long it took to process the request>",
+				})
+			}
 		})
 	}
 
