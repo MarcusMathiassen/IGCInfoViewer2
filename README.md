@@ -8,7 +8,7 @@ Hosted at: https://igcinfoviewer2.herokuapp.com/
 - GET paraglider/api
     api information
 - POST paraglider/api/track
-    Adds a new track
+    Adds a new track by url
     request body:
     ```
     {
@@ -34,3 +34,4 @@ Hosted at: https://igcinfoviewer2.herokuapp.com/
 
 # Incomplete:
 - Anything with webhooks
+- Clock trigger on OpenStack
