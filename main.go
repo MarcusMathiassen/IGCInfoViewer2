@@ -10,22 +10,37 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
+
 	"github.com/gin-gonic/gin"
 	"github.com/marni/goigc"
 )
 
+var session *mgo.Session
+var idCounter int
+
+// TrackMongoDB stores the DB connection
+type TrackMongoDB struct {
+	HostURL        string
+	Databasename   string
+	CollectionName string
+}
+
+var db TrackMongoDB
+var tracksDB *mgo.Collection
+
 type trackInfo struct {
-	ID          int
-	TrackLength float64
-	Pilot       string
-	Glider      string
-	GliderID    string
-	HDate       string
+	ID          int     `bson:"id"`
+	TrackLength float64 `bson:"track_length"`
+	Pilot       string  `bson:"pilot"`
+	Glider      string  `bson:"glider"`
+	GliderID    string  `bson:"glider_id"`
+	HDate       string  `bson:"h_date"`
 }
 
 var (
-	trackInfos []trackInfo  // Holds track information of uploaded igc files
-	startTime  = time.Now() // Used for getting the uptime of the service
+	startTime = time.Now() // Used for getting the uptime of the service
 )
 
 func fmtDurationAsISO8601(duration time.Duration) string {
@@ -48,7 +63,7 @@ func getAndValidateID(c *gin.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if id >= len(trackInfos) {
+	if id >= idCounter {
 		return 0, errors.New("index out of bounds")
 	}
 	return id, nil
@@ -71,7 +86,33 @@ func (t trackInfo) getFieldByName(fieldName string) (string, bool) {
 	}
 }
 
+func getTrackByID(id int) trackInfo {
+	var track trackInfo
+	err := tracksDB.Find(bson.M{"id": id}).One(&track)
+	if err != nil {
+		panic(err)
+	}
+	return track
+}
+
 func main() {
+
+	db = TrackMongoDB{
+		"mongodb://tester:test1234@ds145083.mlab.com:45083/igcinfotracker",
+		"igctracker",
+		"tracks",
+	}
+
+	session, err := mgo.Dial(db.HostURL)
+	if err != nil {
+		panic(err)
+	}
+	defer session.Close()
+	tracksDB = session.DB(db.Databasename).C(db.CollectionName)
+	count, err := tracksDB.Count()
+	if count != 0 {
+		idCounter = count
+	}
 
 	router := gin.Default()
 
@@ -116,9 +157,8 @@ func main() {
 				trackLength += points[i-1].Distance(points[i])
 			}
 
-			id := len(trackInfos)
 			trackInfo := trackInfo{
-				ID:          id,
+				ID:          idCounter,
 				TrackLength: trackLength,
 				Pilot:       track.Pilot,
 				Glider:      track.GliderType,
@@ -126,12 +166,17 @@ func main() {
 				HDate:       track.Header.Date.String(),
 			}
 
-			trackInfos = append(trackInfos, trackInfo)
-			c.JSON(http.StatusOK, gin.H{"id": id})
+			c.JSON(http.StatusOK, gin.H{"id": idCounter})
+			idCounter++
+
+			err = tracksDB.Insert(trackInfo)
+			if err != nil {
+				panic(err)
+			}
 		})
 
 		api.GET("/track", func(c *gin.Context) {
-			ids := make([]int, len(trackInfos))
+			ids := make([]int, idCounter)
 			for i := range ids {
 				ids[i] = i
 			}
@@ -144,7 +189,8 @@ func main() {
 				c.Status(http.StatusNotFound)
 				return
 			}
-			trackInfo := trackInfos[id]
+
+			trackInfo := getTrackByID(id)
 
 			c.JSON(http.StatusOK, gin.H{
 				"H_date":       trackInfo.HDate,
@@ -162,7 +208,7 @@ func main() {
 				return
 			}
 
-			trackInfo := trackInfos[id]
+			trackInfo := getTrackByID(id)
 			fieldRequested, fieldExists := trackInfo.getFieldByName(c.Param("field"))
 			if !fieldExists {
 				c.Status(http.StatusNotFound)
@@ -187,9 +233,7 @@ func main() {
 		})
 
 		api.GET("/ticker/:param", func(c *gin.Context) {
-
 			path := c.Param("param")
-
 			switch path {
 			case "latest":
 				// GET /api/ticker/latest
@@ -209,7 +253,7 @@ func main() {
 				// c.Status(http.StatusNotFound)
 				// }
 				c.JSON(http.StatusOK, gin.H{
-					"t_latest":   "<latest added timestamp of the entire collection>,",
+					"t_latest":   "<latest added timestamp of the entire tracksDB>,",
 					"t_start":    "<the first timestamp of the added track>, this must be higher than the parameter provided in the query",
 					"t_stop":     "<the last timestamp of the added track>, this might equal to t_latest if there are no more tracks left",
 					"tracks":     "[<id1>, <id2>, ...]",
