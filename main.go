@@ -76,9 +76,9 @@ func (t trackInfo) getFieldByName(fieldName string) (string, bool) {
 }
 
 type TrackDB struct {
-	DatabaseURL    string `json:"database_url"`
-	DatabaseName   string `json:"database_name"`
-	CollectionName string `json:"collection_name"`
+	DatabaseURL    string `bson:"database_url"`
+	DatabaseName   string `bson:"database_name"`
+	CollectionName string `bson:"collection_name"`
 }
 
 func getCollection(db TrackDB) *mgo.Collection {
@@ -117,11 +117,12 @@ func (db TrackDB) Init() {
 }
 func (db TrackDB) DeleteAllTracks() int {
 	numDeleted := db.Count()
-	if numDeleted != 0 {
-		_, err := getCollection(db).RemoveAll(bson.M{})
-		if err != nil {
-			panic(err)
-		}
+	if numDeleted == 0 {
+		return 0
+	}
+	_, err := getCollection(db).RemoveAll(bson.M{})
+	if err != nil {
+		panic(err)
 	}
 	return numDeleted
 }
@@ -212,17 +213,20 @@ func main() {
 				return
 			}
 
+			// Parse the track
 			track, err := igc.ParseLocation(url)
 			if err != nil {
 				return
 			}
 
+			// Calculate track length
 			points := track.Points
 			trackLength := 0.0
 			for i := 1; i < len(points); i++ {
 				trackLength += points[i-1].Distance(points[i])
 			}
 
+			// Add to database
 			id := db.Count()
 			err = collection.Insert(trackInfo{
 				ID:          id,
@@ -234,10 +238,10 @@ func main() {
 				TimeStamp:   time.Now().String(),
 				URL:         url,
 			})
-			c.JSON(http.StatusOK, gin.H{"id": id})
 			if err != nil {
 				panic(err)
 			}
+			c.JSON(http.StatusOK, gin.H{"id": id})
 		})
 
 		// GET /api/track
