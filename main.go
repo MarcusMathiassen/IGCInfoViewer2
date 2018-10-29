@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -18,19 +17,8 @@ import (
 )
 
 var (
-	idCounter int
 	startTime = time.Now() // Used for getting the uptime of the service
 )
-
-// TrackMongoDB stores the DB connection
-type TrackMongoDB struct {
-	HostURL        string
-	Databasename   string
-	CollectionName string
-}
-
-var db TrackMongoDB
-var tracksDB *mgo.Collection
 
 type trackInfo struct {
 	ID          int     `bson:"id" json:"id"`
@@ -63,9 +51,6 @@ func getAndValidateID(c *gin.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if id >= idCounter {
-		return 0, errors.New("index out of bounds")
-	}
 	return id, nil
 }
 
@@ -90,35 +75,66 @@ func (t trackInfo) getFieldByName(fieldName string) (string, bool) {
 	}
 }
 
-func getTrackByID(id int) trackInfo {
+type TrackDB struct {
+	DatabaseURL    string `json:"database_url"`
+	DatabaseName   string `json:"database_name"`
+	CollectionName string `json:"collection_name"`
+}
+
+func getCollection(db TrackDB) *mgo.Collection {
+	session, err := mgo.Dial(db.DatabaseURL)
+	if err != nil {
+		panic(err)
+	}
+	return session.DB(db.DatabaseName).C(db.CollectionName)
+}
+
+/// Count ... returns the amount of tracks stored
+func (db TrackDB) Count() int {
+	count, err := getCollection(db).Count()
+	if err != nil {
+		panic(err)
+	}
+	return count
+}
+
+// DeleteAllTracks ...deletes all tracks in the database
+func (db TrackDB) GetTrackByID(id int) trackInfo {
 	var track trackInfo
-	err := tracksDB.Find(bson.M{"id": id}).One(&track)
+	err := getCollection(db).Find(bson.M{"id": id}).One(&track)
 	if err != nil {
 		panic(err)
 	}
 	return track
 }
 
-func main() {
-
-	db = TrackMongoDB{
-		"mongodb://tester:test1234@ds145053.mlab.com:45053/igcinfoviewer",
-		"igcinfoviewer",
-		"Tracks",
-	}
-
-	session, err := mgo.Dial(db.HostURL)
+func (db TrackDB) Init() {
+	session, err := mgo.Dial(db.DatabaseURL)
 	if err != nil {
 		panic(err)
 	}
 	defer session.Close()
-	tracksDB = session.DB(db.Databasename).C(db.CollectionName)
-
-	// Make sure our idCounter is up to date.
-	count, err := tracksDB.Count()
-	if count != 0 {
-		idCounter = count
+}
+func (db TrackDB) DeleteAllTracks() int {
+	numDeleted := db.Count()
+	if numDeleted != 0 {
+		_, err := getCollection(db).RemoveAll(bson.M{})
+		if err != nil {
+			panic(err)
+		}
 	}
+	return numDeleted
+}
+
+func main() {
+
+	db := TrackDB{
+		DatabaseURL:    "mongodb://tester:test1234@ds145053.mlab.com:45053/igcinfoviewer",
+		DatabaseName:   "igcinfoviewer",
+		CollectionName: "Tracks",
+	}
+
+	db.Init()
 
 	router := gin.Default()
 
@@ -135,7 +151,7 @@ func main() {
 		// Response code: 200 if everything is OK, appropriate error code otherwise.
 		// Response: current count of the DB records
 		adminAPI.GET("/track_count", func(c *gin.Context) {
-			numTracks := idCounter
+			numTracks := db.Count()
 			c.String(http.StatusOK, strconv.Itoa(numTracks))
 		})
 
@@ -145,14 +161,7 @@ func main() {
 		// Response code: 200 if everything is OK, appropriate error code otherwise.
 		// Response: count of the DB records removed from DB
 		adminAPI.DELETE("/tracks", func(c *gin.Context) {
-			numDeleted := idCounter
-			idCounter = 0
-			if numDeleted != 0 {
-				_, err := tracksDB.RemoveAll(bson.M{})
-				if err != nil {
-					panic(err)
-				}
-			}
+			numDeleted := db.DeleteAllTracks()
 			c.String(http.StatusOK, strconv.Itoa(numDeleted))
 		})
 	}
@@ -193,9 +202,11 @@ func main() {
 				return
 			}
 
+			collection := getCollection(db)
+
 			// Check if tracks already exists in database
 			var existingTrack trackInfo
-			trackExists := tracksDB.Find(bson.M{"track_src_url": url}).One(&existingTrack)
+			trackExists := collection.Find(bson.M{"track_src_url": url}).One(&existingTrack)
 			if trackExists == nil { // already exists
 				c.JSON(http.StatusOK, gin.H{"id": existingTrack.ID})
 				return
@@ -212,8 +223,9 @@ func main() {
 				trackLength += points[i-1].Distance(points[i])
 			}
 
-			err = tracksDB.Insert(trackInfo{
-				ID:          idCounter,
+			id := db.Count()
+			err = collection.Insert(trackInfo{
+				ID:          id,
 				TrackLength: trackLength,
 				Pilot:       track.Pilot,
 				Glider:      track.GliderType,
@@ -222,10 +234,7 @@ func main() {
 				TimeStamp:   time.Now().String(),
 				URL:         url,
 			})
-
-			c.JSON(http.StatusOK, gin.H{"id": idCounter})
-			idCounter++
-
+			c.JSON(http.StatusOK, gin.H{"id": id})
 			if err != nil {
 				panic(err)
 			}
@@ -237,7 +246,7 @@ func main() {
 		// Response code: 200 if everything is OK, appropriate error code otherwise.
 		// Response: the array of IDs, or an empty array if no tracks have been stored yet.
 		api.GET("/track", func(c *gin.Context) {
-			ids := make([]int, idCounter)
+			ids := make([]int, db.Count())
 			for i := range ids {
 				ids[i] = i
 			}
@@ -255,7 +264,7 @@ func main() {
 				return
 			}
 
-			trackInfo := getTrackByID(id)
+			trackInfo := db.GetTrackByID(id)
 
 			c.JSON(http.StatusOK, gin.H{
 				"H_date":                        trackInfo.HDate,
@@ -280,7 +289,7 @@ func main() {
 				return
 			}
 
-			trackInfo := getTrackByID(id)
+			trackInfo := db.GetTrackByID(id)
 			fieldRequested, fieldExists := trackInfo.getFieldByName(c.Param("field"))
 			if !fieldExists {
 				c.Status(http.StatusNotFound)
@@ -305,6 +314,7 @@ func main() {
 		})
 
 		api.GET("/ticker/:param", func(c *gin.Context) {
+			collection := getCollection(db)
 			param := c.Param("param")
 			switch param {
 			case "latest":
@@ -314,7 +324,7 @@ func main() {
 				// Response code: 200 if everything is OK, appropriate error code otherwise.
 				// Response: <timestamp> for the latest added track
 				var latestTrack trackInfo
-				err := tracksDB.Find(bson.M{"id": idCounter - 1}).One(&latestTrack)
+				err := collection.Find(bson.M{"id": db.Count() - 1}).One(&latestTrack)
 				if err != nil {
 					panic(err)
 				}
@@ -326,18 +336,18 @@ func main() {
 				// Response code: 200 if everything is OK, appropriate error code otherwise.
 				processingTimeStart := time.Now()
 				var tracks []trackInfo
-				err = tracksDB.Find(bson.M{}).All(&tracks)
+				err := collection.Find(bson.M{}).All(&tracks)
 				if err != nil {
 					panic(err)
 				}
-				latestAddedTrackTimestamp := tracks[idCounter-1].TimeStamp
+				latestAddedTrackTimestamp := tracks[db.Count()-1].TimeStamp
 				inputTimestamp := param
 				var track trackInfo
-				err = tracksDB.Find(bson.M{"timestamp": inputTimestamp}).One(&track)
+				err = collection.Find(bson.M{"timestamp": inputTimestamp}).One(&track)
 				if err != nil {
 					panic(err)
 				}
-				processingTimeSpent := 0.001 / time.Since(processingTimeStart).Seconds()
+				processingTimeSpent := time.Since(processingTimeStart).Seconds() * 1000
 
 				// Not complete...
 				c.JSON(http.StatusOK, gin.H{
