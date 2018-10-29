@@ -98,6 +98,15 @@ func (db TrackDB) Count() int {
 	return count
 }
 
+func (db TrackDB) GetLatestTrack() trackInfo {
+	var latestTrack trackInfo
+	err := getCollection(db).Find(bson.M{"id": db.Count() - 1}).One(&latestTrack)
+	if err != nil {
+		panic(err)
+	}
+	return latestTrack
+}
+
 // DeleteAllTracks ...deletes all tracks in the database
 func (db TrackDB) GetTrackByID(id int) trackInfo {
 	var track trackInfo
@@ -309,7 +318,7 @@ func main() {
 		// Response code: 200 if everything is OK, appropriate error code otherwise.
 		api.GET("/ticker", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
-				"t_latest":   "<latest added timestamp>,",
+				"t_latest":   db.GetLatestTrack().TimeStamp,
 				"t_start":    "<the first timestamp of the added track>, this will be the oldest track recorded",
 				"t_stop":     "<the last timestamp of the added track>, this might equal to t_latest if there are no more tracks left",
 				"tracks":     "[<id1>, <id2>, ...]",
@@ -327,12 +336,7 @@ func main() {
 				// Response type: text/plain
 				// Response code: 200 if everything is OK, appropriate error code otherwise.
 				// Response: <timestamp> for the latest added track
-				var latestTrack trackInfo
-				err := collection.Find(bson.M{"id": db.Count() - 1}).One(&latestTrack)
-				if err != nil {
-					panic(err)
-				}
-				c.String(http.StatusOK, latestTrack.TimeStamp)
+				c.String(http.StatusOK, db.GetLatestTrack().TimeStamp)
 			default:
 				// GET /api/ticker/<timestamp>
 				// What: returns the JSON struct representing the ticker for the IGC tracks. The first returned track should have the timestamp HIGHER than the one provided in the query. The array of track IDs returned should be capped at 5, to emulate "paging" of the responses. The cap (5) should be a configuration parameter of the application (ie. easy to change by the administrator).
@@ -344,7 +348,6 @@ func main() {
 				if err != nil {
 					panic(err)
 				}
-				latestAddedTrackTimestamp := tracks[db.Count()-1].TimeStamp
 				inputTimestamp := param
 				var track trackInfo
 				err = collection.Find(bson.M{"timestamp": inputTimestamp}).One(&track)
@@ -353,12 +356,21 @@ func main() {
 				}
 				processingTimeSpent := time.Since(processingTimeStart).Seconds() * 1000
 
-				// Not complete...
+				numTracksToShow := 5
+				if len(tracks) < numTracksToShow {
+					numTracksToShow = len(tracks)
+				}
+				tracksToShow := tracks[len(tracks)-numTracksToShow : len(tracks)]
+				ids := make([]int, numTracksToShow)
+				for i := range tracksToShow {
+					ids[i] = tracksToShow[i].ID
+				}
+
 				c.JSON(http.StatusOK, gin.H{
-					"t_latest":   latestAddedTrackTimestamp,
-					"t_start":    "<the first timestamp of the added track>, this must be higher than the parameter provided in the query",
-					"t_stop":     "<the last timestamp of the added track>, this might equal to t_latest if there are no more tracks left",
-					"tracks":     "[<id1>, <id2>, ...]",
+					"t_latest":   db.GetLatestTrack().TimeStamp,
+					"t_start":    tracksToShow[0].TimeStamp,
+					"t_stop":     tracksToShow[numTracksToShow-1].TimeStamp,
+					"tracks":     ids,
 					"processing": processingTimeSpent,
 				})
 			}
