@@ -1,25 +1,36 @@
-# IGCInfoViewer2
+# IGCInfoViewer
 
+Hosting on Heroku with mongoDB on mLab.
 
-# GET paraglider/api
-What: meta information about the API
-Response type: application/json
-Response code: 200
-Body template
+Hosted at: https://igcinfoviewer2.herokuapp.com/
 
+# Currently working:
+- GET paraglider/api
+    api information
+- POST paraglider/api/track
+    Adds a new track
+    request body:
+    ```
     {
-        "uptime": <uptime>,
-        "info": "Service for Paragliding tracks.",
-        "version": "v1"
+        "url": "<url>"
     }
+    ```
+- GET paraglider/api/track
+    returns an array of all track ids
+- GET paraglider/api/track/<id>
+    returns a track by id
+- GET paraglider/api/track/<id>/<field>
+    return a field in a track
+- GET /admin/api/tracks_count
+    returns the amount of tracks stored
+- DELETE /admin/api/tracks
+    removes all stored trackes
+- GET paraglider/api/ticker
+    ticker information
+- GET paraglider/api/ticker/latest
+    latest ticker information
+- GET paraglider/api/ticker/<timestamp>
+    ticker information of a given timestamp
 
-
-# POST paraglider/api/track
-# GET paraglider/api/track
-# GET paraglider/api/track/<id>
-# GET paraglider/api/track/<id>/<field>
-# GET /admin/api/tracks_count
-# DELETE /admin/api/tracks
-# GET paraglider/api/ticker/
-# GET paraglider/api/ticker/latest
-# GET paraglider/api/ticker/<timestamp>
+# Incomplete:
+    - Anything with webhooks
