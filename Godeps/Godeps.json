@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/MarcusMathiassen/IGCInfoViewer",
+	"ImportPath": "github.com/MarcusMathiassen/IGCInfoViewer2",
 	"GoVersion": "go1.11",
 	"GodepVersion": "v80",
 	"Deps": [
@@ -26,6 +26,31 @@
 			"ImportPath": "github.com/gin-gonic/gin/render",
 			"Comment": "v1.3.0-42-gfbdcbd2",
 			"Rev": "fbdcbd22751c7174d4f363995fca296e4670726b"
+		},
+		{
+			"ImportPath": "github.com/globalsign/mgo",
+			"Comment": "r2018.06.15-9-geeefdec",
+			"Rev": "eeefdecb41b842af6dc652aaea4026e8403e62df"
+		},
+		{
+			"ImportPath": "github.com/globalsign/mgo/bson",
+			"Comment": "r2018.06.15-9-geeefdec",
+			"Rev": "eeefdecb41b842af6dc652aaea4026e8403e62df"
+		},
+		{
+			"ImportPath": "github.com/globalsign/mgo/internal/json",
+			"Comment": "r2018.06.15-9-geeefdec",
+			"Rev": "eeefdecb41b842af6dc652aaea4026e8403e62df"
+		},
+		{
+			"ImportPath": "github.com/globalsign/mgo/internal/sasl",
+			"Comment": "r2018.06.15-9-geeefdec",
+			"Rev": "eeefdecb41b842af6dc652aaea4026e8403e62df"
+		},
+		{
+			"ImportPath": "github.com/globalsign/mgo/internal/scram",
+			"Comment": "r2018.06.15-9-geeefdec",
+			"Rev": "eeefdecb41b842af6dc652aaea4026e8403e62df"
 		},
 		{
 			"ImportPath": "github.com/golang/geo/r1",
