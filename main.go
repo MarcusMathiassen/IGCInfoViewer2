@@ -37,6 +37,7 @@ type trackInfo struct {
 	Glider      string  `bson:"glider"`
 	GliderID    string  `bson:"glider_id"`
 	HDate       string  `bson:"h_date"`
+	url         string  `bson:"url"`
 }
 
 var (
@@ -81,6 +82,8 @@ func (t trackInfo) getFieldByName(fieldName string) (string, bool) {
 		return t.HDate, true
 	case "track_length":
 		return strconv.FormatFloat(t.TrackLength, 'f', 6, 64), true
+	case "url":
+		return t.url, true
 	default:
 		return "", false
 	}
@@ -98,9 +101,9 @@ func getTrackByID(id int) trackInfo {
 func main() {
 
 	db = TrackMongoDB{
-		"mongodb://tester:test1234@ds145083.mlab.com:45083/igcinfotracker",
+		"mongodb://127.0.0.1:27017/igcinfotracker",
 		"igctracker",
-		"tracks",
+		"Tracks",
 	}
 
 	session, err := mgo.Dial(db.HostURL)
@@ -146,6 +149,14 @@ func main() {
 				return
 			}
 
+			// Check if already exists
+			var existingTrack trackInfo
+			trackExists := tracksDB.Find(bson.M{url: url}).One(&existingTrack)
+			if trackExists != nil { // already exists
+				c.JSON(http.StatusOK, gin.H{"id": existingTrack.ID})
+				return
+			}
+
 			track, err := igc.ParseLocation(url)
 			if err != nil {
 				return
@@ -157,19 +168,19 @@ func main() {
 				trackLength += points[i-1].Distance(points[i])
 			}
 
-			trackInfo := trackInfo{
+			err = tracksDB.Insert(trackInfo{
 				ID:          idCounter,
 				TrackLength: trackLength,
 				Pilot:       track.Pilot,
 				Glider:      track.GliderType,
 				GliderID:    track.GliderID,
 				HDate:       track.Header.Date.String(),
-			}
+				url:         url,
+			})
 
 			c.JSON(http.StatusOK, gin.H{"id": idCounter})
 			idCounter++
 
-			err = tracksDB.Insert(trackInfo)
 			if err != nil {
 				panic(err)
 			}
@@ -261,6 +272,8 @@ func main() {
 				})
 			}
 		})
+
+		// WEBHOOKS
 	}
 
 	port := os.Getenv("PORT")
