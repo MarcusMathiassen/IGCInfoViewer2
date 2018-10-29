@@ -6,14 +6,14 @@
     Response type: application/json
     Response code: 200
     Body template
-    ```
-    {
-        "uptime": <uptime>,
-        "info": "Service for Paragliding tracks.",
-        "version": "v1"
-    }
-    ```
     
+        {
+            "uptime": <uptime>,
+            "info": "Service for Paragliding tracks.",
+            "version": "v1"
+        }
+
+
 	# POST paraglider/api/track
 	# GET paraglider/api/track
 	# GET paraglider/api/track/<id>
