@@ -317,12 +317,30 @@ func main() {
 		// Response type: application/json
 		// Response code: 200 if everything is OK, appropriate error code otherwise.
 		api.GET("/ticker", func(c *gin.Context) {
+			collection := getCollection(db)
+			processingTimeStart := time.Now()
+			var tracks []trackInfo
+			err := collection.Find(bson.M{}).All(&tracks)
+			if err != nil {
+				panic(err)
+			}
+			numTracksToShow := 5
+			if len(tracks) < numTracksToShow {
+				numTracksToShow = len(tracks)
+			}
+			tracksToShow := tracks[len(tracks)-numTracksToShow : len(tracks)]
+			ids := make([]int, numTracksToShow)
+			for i := range tracksToShow {
+				ids[i] = tracksToShow[i].ID
+			}
+
+			processingTimeSpent := time.Since(processingTimeStart).Seconds() * 1000
 			c.JSON(http.StatusOK, gin.H{
 				"t_latest":   db.GetLatestTrack().TimeStamp,
-				"t_start":    "<the first timestamp of the added track>, this will be the oldest track recorded",
-				"t_stop":     "<the last timestamp of the added track>, this might equal to t_latest if there are no more tracks left",
-				"tracks":     "[<id1>, <id2>, ...]",
-				"processing": "<time in ms of how long it took to process the request>",
+				"t_start":    tracksToShow[0].TimeStamp,
+				"t_stop":     tracksToShow[numTracksToShow-1].TimeStamp,
+				"tracks":     ids,
+				"processing": processingTimeSpent,
 			})
 		})
 
@@ -352,24 +370,31 @@ func main() {
 				var track trackInfo
 				err = collection.Find(bson.M{"timestamp": inputTimestamp}).One(&track)
 				if err != nil {
-					panic(err)
+					c.Status(http.StatusNotFound)
+					return
 				}
-				processingTimeSpent := time.Since(processingTimeStart).Seconds() * 1000
+				idOfQuery := tracks[track.ID].ID
+
+				trackCount := len(tracks)
 
 				numTracksToShow := 5
-				if len(tracks) < numTracksToShow {
-					numTracksToShow = len(tracks)
+
+				rangeMin := idOfQuery
+				rangeMax := idOfQuery + numTracksToShow
+				if rangeMax > trackCount {
+					rangeMax = trackCount
 				}
-				tracksToShow := tracks[len(tracks)-numTracksToShow : len(tracks)]
-				ids := make([]int, numTracksToShow)
+				tracksToShow := tracks[rangeMin:rangeMax]
+				ids := make([]int, rangeMax-rangeMin)
 				for i := range tracksToShow {
 					ids[i] = tracksToShow[i].ID
 				}
 
+				processingTimeSpent := time.Since(processingTimeStart).Seconds() * 1000
 				c.JSON(http.StatusOK, gin.H{
 					"t_latest":   db.GetLatestTrack().TimeStamp,
 					"t_start":    tracksToShow[0].TimeStamp,
-					"t_stop":     tracksToShow[numTracksToShow-1].TimeStamp,
+					"t_stop":     tracksToShow[len(tracksToShow)-1].TimeStamp,
 					"tracks":     ids,
 					"processing": processingTimeSpent,
 				})
